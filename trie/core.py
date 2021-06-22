@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from itertools import chain, islice
-from typing import List, Hashable, Dict, Union, cast
+from typing import List, Hashable, Dict, Union
 
 TreeType = Union['TreeType', Dict[Hashable, 'TreeType']]
 
@@ -53,3 +53,48 @@ class Trie(object):
 
     def is_sentinel(self, obj) -> bool:
         return obj == Sentinel
+
+    def remove_one(self, to_remove: List[Hashable]) -> 'Trie':
+        """Remove one element. Input should be a list of tokens (all tokenization work should be already performed)."""
+        if not to_remove:
+            return self
+
+        subtree = self._tree
+        stack = []
+        for el, next_el in zip(to_remove, islice(chain(to_remove, [Sentinel]), 1, None)):
+            if self.is_sentinel(subtree):
+                # special case: {"a": {"b": Sentinel}}, but user requested to delete ["a", "b", "c"]
+                raise KeyError(to_remove)
+
+            if el not in subtree:
+                raise KeyError(to_remove)
+
+            stack.append(subtree)
+            subtree = subtree[el]
+            if self.is_sentinel(next_el):
+                if not self.is_sentinel(subtree) and "" not in subtree:
+                    # special case: {"a": {"b": Sentinel}}, but user requested to delete ["a"]
+                    raise KeyError(to_remove)
+
+        if stack[-1][to_remove[-1]] == {"": Sentinel}:
+            # special case: after sequence of deletions (i.e. after at least one delete_one)
+            # we are in {"a": {"b": {"": Sentinel}}} state, and user requested to delete ["a", "b"]
+            # so we normalize state to {"a": {"b": Sentinel}}
+            stack[-1][to_remove[-1]] = Sentinel
+
+        for el, subtree in zip(reversed(to_remove), reversed(stack)):
+            if self.is_sentinel(subtree[el]):
+                del subtree[el]
+                continue
+
+            if not subtree[el]:
+                del subtree[el]
+
+        return self
+
+    def remove_many(self, many_to_remove: List[List[Hashable]]) -> 'Trie':
+        """Remove many elements. Shortcut for multiple remove_one calls."""
+        for to_remove in many_to_remove:
+            self.remove_one(to_remove)
+
+        return self
